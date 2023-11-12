@@ -1,6 +1,6 @@
 // C++ code
 // Varal Inteligente - Estacio - A.D.S.
-// Alunos: Fernando Henrique, Guilherme Felix Maria Luiza Andrade
+// Alunos: Fernando Henrique, Guilherme Felix, Maria Luiza Andrade
 
 #define PRIMARY_MOTOR 3
 #define PRIMARY_MOTOR_TO_OPEN 2
