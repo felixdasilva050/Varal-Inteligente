@@ -2,11 +2,29 @@
 // Varal Inteligente - Estacio - A.D.S.
 // Alunos: Fernando Henrique, Guilherme Felix, Maria Luiza Andrade
 
+#include <ESP8266WiFi.h> 
+#include <PubSubClient.h> //library PubSubClient by Nick O'Leary
+
+//GATES
 #define PRIMARY_MOTOR 3
 #define PRIMARY_MOTOR_TO_OPEN 2
 #define PRIMARY_MOTOR_TO_CLOSE 4
-#define TIME_MILLISECOND 5000
 #define WATER_SENSOR_SIGNAL A0
+
+//TIME
+#define TIME_MILLISECOND 5000
+
+//CONFIG ESP8266
+#define WIFI_SSID "" //set your SSID
+#define WIFI_PASSWORD "" // set your Password
+
+//MQTT - thingspeak
+#define MQTT_SERVER "mqtt3.thingspeak.com"
+#define MQTT_DEVICE_CLIENT_ID "" //insert data from the device registered in thingspeak
+#define MQTT_DEVICE_USERNAME ""      
+#define MQTT_DEVICE_PASSWORD ""    
+#define TOPIC "channels/XXXXXXX/publish" //insert channel id thingspeak
+#define PORT 1883
 
 int speed = 255;
 int valueWaterSensor = 0;
