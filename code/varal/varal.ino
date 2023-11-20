@@ -27,7 +27,7 @@ extern "C"{
 #define WIFI_SSID ""
 #define WIFI_PASSWORD ""
 #define API_KEY ""
-#define SERVER ""
+#define SERVER "api.thingspeak.com"
 
 os_timer_t mTimer;
 bool _timeout = false;
@@ -64,9 +64,11 @@ void loop(){
   digitalWrite(LED_BUILTIN, HIGH);
   if(VALUE_WATER_SENSOR <= OFF_WATER_SENSOR){
     Serial.println("IF");
+    sendMessage(1);
   	motorToOpen();
   } else if (VALUE_WATER_SENSOR > OFF_WATER_SENSOR){
     Serial.println("ELSE");
+    sendMessage(0);
     motorToClose();
   }
   digitalWrite(LED_BUILTIN, LOW);
@@ -76,36 +78,57 @@ void loop(){
 
 void motorToOpen(){
   for(int i = 0; i<CYCLES;i++){
-    if(VALUE_WATER_SENSOR <= OFF_WATER_SENSOR){
-      mp.step(STEPS_PER_SPIN);
-      Serial.print(i);
-      Serial.print(", ");
-    }else{
+    int value = analogRead(WATER_SENSOR_SIGNAL);
+    if(value > OFF_WATER_SENSOR){
+      Serial.println(":::ENTREI NO IF TO OPEN");
       break;
     }
+    mp.step(STEPS_PER_SPIN);
+    yield();
   }
 }
 
 void motorToClose(){
   for(int i = 0; i<CYCLES;i++){
-    if (VALUE_WATER_SENSOR > OFF_WATER_SENSOR){
-      mp.step(-STEPS_PER_SPIN);
-      Serial.print(i);
-      Serial.print(", ");
-    }else{
+    int value = analogRead(WATER_SENSOR_SIGNAL);
+    if (value <= OFF_WATER_SENSOR){
+      Serial.println("___ENTREI NO IF TO CLOSE");
       break;
     }
+    mp.step(-STEPS_PER_SPIN);
+    yield();
   }
 }
 
-bool verifyRoofOpenLimit(){
-  int valueSensor = digitalRead(ROOF_SENSOR_OPEN);
-  return valueSensor > 0;
-}
+// bool verifyRoofOpenLimit(){
+//   int valueSensor = digitalRead(ROOF_SENSOR_OPEN);
+//   return valueSensor > 0;
+// }
 
-bool verifyRoofCloseLimit(){
-  int valueSensor = digitalRead(ROOF_SENSOR_CLOSE);
-  return valueSensor > 0;
+// bool verifyRoofCloseLimit(){
+//   int valueSensor = digitalRead(ROOF_SENSOR_CLOSE);
+//   return valueSensor > 0;
+// }
+
+void sendMessage(int value){
+  if (_timeout){
+    if (client.connect(SERVER,80)) { //Starts a TCP client to send data
+      String postStr = API_KEY;
+             postStr +="&field1=";
+             postStr += String(value);
+      client.print("POST /update HTTP/1.1\n");
+      client.print("Host: api.thingspeak.com\n");
+      client.print("Connection: close\n");
+      client.print("X-THINGSPEAKAPIKEY: "+(String)API_KEY+"\n");
+      client.print("Content-Type: application/x-www-form-urlencoded\n");
+      client.print("Content-Length: ");
+      client.print(postStr.length());
+      client.print("\n\n");
+      client.print(postStr);
+    }
+    client.stop();
+    _timeout = false;
+  }
 }
 
 // WiFi METHODS
