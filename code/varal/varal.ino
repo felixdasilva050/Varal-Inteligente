@@ -1,98 +1,132 @@
-// C++ code
-// Varal Inteligente - Estacio - A.D.S.
-// Alunos: Fernando Henrique, Guilherme Felix, Maria Luiza Andrade
+/* C++ code
+* Varal Inteligente - Estacio do Recife- A.D.S.
+* Students: Guilherme Felix, Fernando Henrique, Maria Luiza Andrade
+* Author: Guilherme Felix da Silva
+* Contact: guilhermefelix.ofwork@gmail.com
+*/
 
-#include <ESP8266WiFi.h> 
+//LIBRARIES
+#include <ESP8266WiFi.h>   // if not 
 #include <PubSubClient.h> //library PubSubClient by Nick O'Leary
+#include <Stepper.h>
+extern "C"{
+  #include "user_interface.h" 
+}
 
 //GATES
-#define PRIMARY_MOTOR 3
-#define PRIMARY_MOTOR_TO_OPEN 2
-#define PRIMARY_MOTOR_TO_CLOSE 4
+#define e1 D0
+#define e2 D1
+#define e3 D2
+#define e4 D3
 #define WATER_SENSOR_SIGNAL A0
+#define ROOF_SENSOR_OPEN D8
+#define ROOF_SENSOR_CLOSE D7
 
-//TIME
-#define TIME_MILLISECOND 5000
+// WiFi CONFIG
+//credentials
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
+#define API_KEY ""
+#define SERVER ""
 
-//CONFIG ESP8266
-#define WIFI_SSID "" //set your SSID
-#define WIFI_PASSWORD "" // set your Password
+bool flag=false
 
-//MQTT - thingspeak
-#define MQTT_SERVER "mqtt3.thingspeak.com"
-#define MQTT_DEVICE_CLIENT_ID "" //insert data from the device registered in thingspeak
-#define MQTT_DEVICE_USERNAME ""      
-#define MQTT_DEVICE_PASSWORD ""    
-#define TOPIC "channels/XXXXXXX/publish" //insert channel id thingspeak
-#define PORT 1883
+os_timer_t mTimer;
+bool _timeout = false;
 
-int speed = 255;
-int valueWaterSensor = 0;
-int offWaterSensor = 0;
-bool flagOpenRoof = false;
+WiFiClient client;
 
-void setup()
-{
-  pinMode(PRIMARY_MOTOR, OUTPUT);
-  pinMode(PRIMARY_MOTOR_TO_OPEN, OUTPUT);
-  pinMode(PRIMARY_MOTOR_TO_CLOSE, OUTPUT);
+int VALUE_WATER_SENSOR = 0;
+const int OFF_WATER_SENSOR = 200;
+
+//STEPPER MOTOR VARIABLES
+const int STEPS_PER_SPIN = 64; //see how many steps your motor needs to complete one rotation and change if necessary
+const int ROTATION_SPEED=500; //change if necessary. Higher values may not work very well. check your engine before changing
+const int CYCLES = 1285;
+
+//STEPPER MOTOR CONFIG
+Stepper mp(STEPS_PER_SPIN, e1,e3,e2,e4);
+
+void setup(){
   pinMode(WATER_SENSOR_SIGNAL, INPUT);
-  
-  analogWrite(PRIMARY_MOTOR, 0);
-  digitalWrite(PRIMARY_MOTOR_TO_OPEN, LOW);
-  digitalWrite(PRIMARY_MOTOR_TO_CLOSE, LOW);
-  
+  pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(9600);
+  
+  mp.setSpeed(ROTATION_SPEED);
+
+  initWiFi();
+  usrInit(); 
+  // PINS TO STOP ROOF
+  // pinMode(ROOF_SENSOR_OPEN, INPUT);
+  // pinMode(ROOF_SENSOR_CLOSE, INPUT);
 }
 
-void loop()
-{
-  valueWaterSensor = analogRead(WATER_SENSOR_SIGNAL);
-  
-  if(valueWaterSensor > offWaterSensor && !flagOpenRoof){
-  	motorToClose(PRIMARY_MOTOR, flagOpenRoof);
-  	delay(1000);
-  } else if (valueWaterSensor <= offWaterSensor && flagOpenRoof){
-  	motorToOpen(PRIMARY_MOTOR, flagOpenRoof);
+void loop(){
+  VALUE_WATER_SENSOR = analogRead(WATER_SENSOR_SIGNAL);
+  digitalWrite(LED_BUILTIN, HIGH);
+  if(VALUE_WATER_SENSOR <= OFF_WATER_SENSOR){
+    Serial.println("IF");
+  	motorToOpen();
+  } else if (VALUE_WATER_SENSOR > OFF_WATER_SENSOR){
+    Serial.println("ELSE");
+    motorToClose();
   }
-  Serial.println("start");
+  digitalWrite(LED_BUILTIN, LOW);
   delay(1000);
+  yield();
 }
 
-void motorToOpen(int motor, bool &flag){
-  Serial.println("entrei to open");
-  analogWrite(motor, speed); // set speed
-  
-  /*set rotation (to open)*/
-  digitalWrite(PRIMARY_MOTOR_TO_OPEN, HIGH);
-  digitalWrite(PRIMARY_MOTOR_TO_CLOSE, LOW);
-  
-  /*Maybe change it to an infrared sensor*/
-  delay(TIME_MILLISECOND); // operation time
-  motorTurnOff(motor);
-  
-  flag = false;
+void motorToOpen(){
+  for(int i = 0; i<CYCLES;i++){
+    if(VALUE_WATER_SENSOR <= OFF_WATER_SENSOR){
+      mp.step(STEPS_PER_SPIN);
+      Serial.print(i);
+      Serial.print(", ");
+    }else{
+      break;
+    }
+  }
 }
 
-void motorTurnOff(int motor){
-  //turn off 
-  analogWrite(motor, 0);
-  digitalWrite(PRIMARY_MOTOR_TO_OPEN, LOW);
-  digitalWrite(PRIMARY_MOTOR_TO_CLOSE, LOW);  
+void motorToClose(){
+  for(int i = 0; i<CYCLES;i++){
+    if (VALUE_WATER_SENSOR > OFF_WATER_SENSOR){
+      mp.step(-STEPS_PER_SPIN);
+      Serial.print(i);
+      Serial.print(", ");
+    }else{
+      break;
+    }
+  }
 }
 
-void motorToClose(int motor, bool &flag){
-  Serial.println("entrei to close");
-  analogWrite(motor, speed); // set speed
-  
-  /*set rotation (to close)*/
-  digitalWrite(PRIMARY_MOTOR_TO_OPEN, LOW);
-  digitalWrite(PRIMARY_MOTOR_TO_CLOSE, HIGH);
-  
-  /*Maybe change it to an infrared sensor*/
-  delay(TIME_MILLISECOND); // operation time
-  motorTurnOff(motor);
-  
-  flag = true;
-  
+bool verifyRoofOpenLimit(){
+  int valueSensor = digitalRead(ROOF_SENSOR_OPEN);
+  return valueSensor > 0;
+}
+
+bool verifyRoofCloseLimit(){
+  int valueSensor = digitalRead(ROOF_SENSOR_CLOSE);
+  return valueSensor > 0;
+}
+
+// WiFi METHODS
+void tCallback(void *tCall){
+    _timeout = true;
+}
+
+void usrInit(void) {
+    os_timer_setfn(&mTimer, tCallback, NULL); //Indicates the subroutine to the timer.
+    os_timer_arm(&mTimer, 10000, true); //Indicates to the Timer the time in ms and whether it will be repeated or just once (loop = true)
+}
+
+void initWiFi() {
+  Serial.println("entrei");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to WiFi ..");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print('.');
+    delay(1000);
+  }
+  Serial.println(WiFi.localIP());
 }
