@@ -29,8 +29,6 @@ extern "C"{
 #define API_KEY ""
 #define SERVER ""
 
-bool flag=false
-
 os_timer_t mTimer;
 bool _timeout = false;
 
